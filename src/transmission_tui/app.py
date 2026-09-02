@@ -17,14 +17,10 @@ from .rpc import AddedTorrent, TorrentDetails, TorrentSnapshot, TransmissionClie
 class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
     """Dialog used to add a torrent from an URL or magnet link."""
 
-    BINDINGS = [
-        ("escape", "cancel", "Cancel"),
-    ]
+    BINDINGS = [("escape", "cancel", "Cancel")]
 
     CSS = """
-    AddTorrentScreen {
-        align: center middle;
-    }
+    AddTorrentScreen { align: center middle; }
     #add-box {
         width: 85%;
         max-width: 110;
@@ -52,8 +48,14 @@ class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="add-box"):
-            yield Static("Add torrent — paste an HTTP(S) .torrent URL or magnet link", id="add-title")
-            yield Input(placeholder="https://…/file.torrent  or  magnet:?xt=urn:btih:…", id="add-source")
+            yield Static(
+                "Add torrent — paste an HTTP(S) .torrent URL or magnet link",
+                id="add-title",
+            )
+            yield Input(
+                placeholder="https://…/file.torrent  or  magnet:?xt=urn:btih:…",
+                id="add-source",
+            )
             yield Static("Enter: add   Esc: cancel", id="add-hint")
             yield Static("", id="add-error")
 
@@ -72,59 +74,66 @@ class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
         self.dismiss(added)
 
 
-class DeleteTorrentScreen(ModalScreen[bool]):
-    """Destructive confirmation before deleting a torrent and its data."""
+class RemoveTorrentScreen(ModalScreen[bool]):
+    """Confirmation before removing a torrent, optionally with its data."""
 
     BINDINGS = [
-        ("y", "confirm", "Delete"),
+        ("y", "confirm", "Confirm"),
         ("n", "cancel", "Cancel"),
         ("escape", "cancel", "Cancel"),
     ]
 
     CSS = """
-    DeleteTorrentScreen {
-        align: center middle;
-    }
-    #delete-box {
+    RemoveTorrentScreen { align: center middle; }
+    #remove-box {
         width: 80%;
         max-width: 100;
         height: auto;
-        border: round $error;
+        border: round $warning;
         padding: 1 2;
         background: $surface;
     }
-    #delete-title {
+    #remove-title {
         text-style: bold;
-        color: $error;
         margin-bottom: 1;
     }
-    #delete-name {
-        margin-bottom: 1;
-    }
-    #delete-warning {
+    #remove-name { margin-bottom: 1; }
+    #remove-warning {
         color: $warning;
         margin-bottom: 1;
     }
     """
 
-    def __init__(self, torrent_id: int, torrent_name: str) -> None:
+    def __init__(
+        self, torrent_id: int, torrent_name: str, *, delete_data: bool
+    ) -> None:
         super().__init__()
         self.torrent_id = torrent_id
         self.torrent_name = torrent_name
+        self.delete_data = delete_data
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="delete-box"):
-            yield Static("Delete torrent and data?", id="delete-title")
+        if self.delete_data:
+            title = "Delete torrent and data?"
+            warning = (
+                "This removes the torrent from Transmission AND deletes its "
+                "downloaded files."
+            )
+            confirm = "y: delete permanently   n / Esc: cancel"
+        else:
+            title = "Remove torrent from Transmission?"
+            warning = "Downloaded files will be kept on disk."
+            confirm = "y: remove torrent   n / Esc: cancel"
+
+        with Vertical(id="remove-box"):
+            yield Static(title, id="remove-title")
             yield Static(
                 f"Torrent {self.torrent_id}: {self.torrent_name}",
-                id="delete-name",
+                id="remove-name",
                 markup=False,
             )
-            yield Static(
-                "This removes the torrent from Transmission AND deletes its downloaded files.",
-                id="delete-warning",
-            )
-            yield Static("y: delete permanently   n / Esc: cancel")
+            yield Static(warning, id="remove-warning")
+            yield Static(confirm)
 
     def action_confirm(self) -> None:
         self.dismiss(True)
@@ -231,7 +240,10 @@ class TransmissionTUI(App[None]):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("a", "add_torrent", "Add"),
-        ("d", "delete_torrent", "Delete"),
+        ("space", "toggle_pause", "Pause/Resume"),
+        ("v", "verify_torrent", "Verify"),
+        ("x", "remove_torrent", "Remove"),
+        ("d", "delete_torrent", "Delete data"),
         ("r", "refresh_now", "Refresh"),
         ("i", "sort_id", "Sort ID"),
         ("u", "sort_up", "Sort Up"),
@@ -263,7 +275,15 @@ class TransmissionTUI(App[None]):
         table = self.query_one("#table", DataTable)
         table.cursor_type = "row"
         table.add_columns(
-            "ID", "Done", "Size", "Uploaded", "Down", "Up", "Ratio", "Status", "Name"
+            "ID",
+            "Done",
+            "Size",
+            "Uploaded",
+            "Down",
+            "Up",
+            "Ratio",
+            "Status",
+            "Name",
         )
         self.set_interval(1.0, self.refresh_data)
         self.refresh_data()
@@ -278,6 +298,16 @@ class TransmissionTUI(App[None]):
             return
         self.push_screen(TorrentDetailScreen(details))
 
+    def _selected_torrent(self) -> tuple[int, str, str] | None:
+        table = self.query_one("#table", DataTable)
+        if not table.row_count:
+            return None
+        try:
+            row = table.get_row_at(table.cursor_row)
+            return int(str(row[0])), str(row[8]), str(row[7])
+        except (IndexError, KeyError, TypeError, ValueError):
+            return None
+
     def action_add_torrent(self) -> None:
         self.push_screen(AddTorrentScreen(self.rpc), self._torrent_added)
 
@@ -289,39 +319,83 @@ class TransmissionTUI(App[None]):
             f"Added torrent {added.id}: {added.name}"
         )
 
-    def action_delete_torrent(self) -> None:
-        table = self.query_one("#table", DataTable)
-        if not table.row_count:
+    def action_toggle_pause(self) -> None:
+        selected = self._selected_torrent()
+        if selected is None:
             return
+        torrent_id, torrent_name, status = selected
         try:
-            row = table.get_row_at(table.cursor_row)
-            torrent_id = int(str(row[0]))
-            torrent_name = str(row[8])
-        except (IndexError, KeyError, TypeError, ValueError):
+            if status == "stopped":
+                self.rpc.start_torrent(torrent_id)
+                message = f"Resumed torrent {torrent_id}: {torrent_name}"
+            else:
+                self.rpc.stop_torrent(torrent_id)
+                message = f"Paused torrent {torrent_id}: {torrent_name}"
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
+        self.refresh_data()
+        self.query_one("#summary", Static).update(message)
 
+    def action_verify_torrent(self) -> None:
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, torrent_name, _ = selected
+        try:
+            self.rpc.verify_torrent(torrent_id)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        self.refresh_data()
+        self.query_one("#summary", Static).update(
+            f"Verification requested for torrent {torrent_id}: {torrent_name}"
+        )
+
+    def action_remove_torrent(self) -> None:
+        self._confirm_remove(delete_data=False)
+
+    def action_delete_torrent(self) -> None:
+        self._confirm_remove(delete_data=True)
+
+    def _confirm_remove(self, *, delete_data: bool) -> None:
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, torrent_name, _ = selected
         self.push_screen(
-            DeleteTorrentScreen(torrent_id, torrent_name),
-            lambda confirmed: self._torrent_delete_confirmed(
-                torrent_id, torrent_name, confirmed
+            RemoveTorrentScreen(
+                torrent_id, torrent_name, delete_data=delete_data
+            ),
+            lambda confirmed: self._torrent_remove_confirmed(
+                torrent_id,
+                torrent_name,
+                delete_data,
+                confirmed,
             ),
         )
 
-    def _torrent_delete_confirmed(
-        self, torrent_id: int, torrent_name: str, confirmed: bool
+    def _torrent_remove_confirmed(
+        self,
+        torrent_id: int,
+        torrent_name: str,
+        delete_data: bool,
+        confirmed: bool,
     ) -> None:
         if not confirmed:
             return
         try:
-            self.rpc.remove_torrent(torrent_id, delete_data=True)
+            self.rpc.remove_torrent(torrent_id, delete_data=delete_data)
         except Exception as exc:
             self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
 
         self.refresh_data()
-        self.query_one("#summary", Static).update(
-            f"Deleted torrent {torrent_id} and its data: {torrent_name}"
-        )
+        if delete_data:
+            message = f"Deleted torrent {torrent_id} and its data: {torrent_name}"
+        else:
+            message = f"Removed torrent {torrent_id}; data kept: {torrent_name}"
+        self.query_one("#summary", Static).update(message)
 
     def action_refresh_now(self) -> None:
         self.refresh_data()
@@ -390,9 +464,7 @@ class TransmissionTUI(App[None]):
         table = self.query_one("#table", DataTable)
         new_order = [str(torrent.id) for torrent in torrents]
 
-        # The normal one-second refresh keeps the same torrents in the same
-        # order. Update cells in place in that case: no clear(), no relayout,
-        # and therefore no visible scroll/cursor jump.
+        # Normal refresh: update cells in place to keep the viewport stable.
         if table.row_count == len(torrents) and new_order == self._row_order:
             for row_index, torrent in enumerate(torrents):
                 for column_index, value in enumerate(self._row_values(torrent)):
@@ -401,9 +473,8 @@ class TransmissionTUI(App[None]):
                         table.update_cell_at(coordinate, value)
             return
 
-        # Only rebuild when torrents are added/removed or the requested sort
-        # order actually changes. Preserve the selected torrent and viewport
-        # for those comparatively rare structural updates.
+        # Structural refresh after add/remove/sort: rebuild while preserving
+        # the selected torrent and viewport.
         selected_id: str | None = None
         saved_scroll_y = table.scroll_y
         if table.row_count:
