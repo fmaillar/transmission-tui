@@ -44,6 +44,12 @@ class TorrentFile:
 
 
 @dataclass(frozen=True, slots=True)
+class TorrentLimits:
+    download: int | None
+    upload: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class TorrentDetails:
     id: int
     name: str
@@ -116,6 +122,57 @@ class TransmissionClient:
     def verify_torrent(self, torrent_id: int) -> None:
         """Ask Transmission to verify the local data for one torrent."""
         self._client.verify_torrent(torrent_id)
+
+    def torrent_limits(self, torrent_id: int) -> TorrentLimits:
+        """Return current per-torrent download/upload limits in kB/s."""
+        torrent = self._client.get_torrent(
+            torrent_id,
+            arguments=(
+                "downloadLimited",
+                "downloadLimit",
+                "uploadLimited",
+                "uploadLimit",
+            ),
+        )
+        download_limited = bool(
+            _attr(torrent, "download_limited", "downloadLimited", default=False)
+        )
+        upload_limited = bool(
+            _attr(torrent, "upload_limited", "uploadLimited", default=False)
+        )
+        return TorrentLimits(
+            download=_int(
+                _attr(torrent, "download_limit", "downloadLimit", default=0)
+            )
+            if download_limited
+            else None,
+            upload=_int(_attr(torrent, "upload_limit", "uploadLimit", default=0))
+            if upload_limited
+            else None,
+        )
+
+    def set_torrent_limits(
+        self,
+        torrent_id: int,
+        *,
+        download: int | None,
+        upload: int | None,
+    ) -> None:
+        """Set per-torrent bandwidth limits in kB/s; None means unlimited."""
+        if download is not None and download <= 0:
+            raise ValueError("Download limit must be positive")
+        if upload is not None and upload <= 0:
+            raise ValueError("Upload limit must be positive")
+
+        kwargs: dict[str, object] = {
+            "download_limited": download is not None,
+            "upload_limited": upload is not None,
+        }
+        if download is not None:
+            kwargs["download_limit"] = download
+        if upload is not None:
+            kwargs["upload_limit"] = upload
+        self._client.change_torrent(torrent_id, **kwargs)
 
     def torrent_files(self, torrent_id: int) -> tuple[str, list[TorrentFile]]:
         """Return file selection, progress and priority for one torrent."""
