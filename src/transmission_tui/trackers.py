@@ -12,6 +12,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
+from .app import TorrentDetailScreen as BaseTorrentDetailScreen
 from .location import TransmissionTUI as BaseTransmissionTUI
 from .rpc import TransmissionClient as BaseTransmissionClient
 
@@ -123,6 +124,28 @@ class TrackerTransmissionClient(BaseTransmissionClient):
         self._client.reannounce_torrent(torrent_id)
 
 
+class ContextTorrentDetailScreen(BaseTorrentDetailScreen):
+    """Torrent details with only the shortcuts valid in this view."""
+
+    CSS = BaseTorrentDetailScreen.CSS + """
+    #context-shortcuts {
+        height: 1;
+        padding: 0 1;
+        background: $panel;
+        color: $text-muted;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static(self._render_details(), id="details", markup=False)
+        yield Static(
+            "Esc Back   q Back",
+            id="context-shortcuts",
+            markup=False,
+        )
+
+
 class TorrentTrackersScreen(Screen[None]):
     """Display tracker state for one torrent and allow manual reannounce."""
 
@@ -136,6 +159,12 @@ class TorrentTrackersScreen(Screen[None]):
     CSS = """
     #trackers-summary { height: 2; padding: 0 1; }
     #trackers-table { height: 1fr; }
+    #context-shortcuts {
+        height: 1;
+        padding: 0 1;
+        background: $panel;
+        color: $text-muted;
+    }
     """
 
     def __init__(
@@ -157,7 +186,11 @@ class TorrentTrackersScreen(Screen[None]):
             markup=False,
         )
         yield DataTable(id="trackers-table", zebra_stripes=True)
-        yield Footer()
+        yield Static(
+            "Esc Back   q Back   r Refresh   a Reannounce",
+            id="context-shortcuts",
+            markup=False,
+        )
 
     def on_mount(self) -> None:
         table = self.query_one("#trackers-table", DataTable)
@@ -287,6 +320,16 @@ class TransmissionTUI(BaseTransmissionTUI):
             markup=False,
         )
         yield Footer()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open the contextual details view for the selected torrent."""
+        try:
+            torrent_id = int(str(event.row_key.value))
+            details = self.rpc.torrent_details(torrent_id)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        self.push_screen(ContextTorrentDetailScreen(details))
 
     def action_show_trackers(self) -> None:
         selected = self._selected_torrent()
