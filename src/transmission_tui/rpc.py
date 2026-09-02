@@ -34,6 +34,16 @@ class AddedTorrent:
 
 
 @dataclass(frozen=True, slots=True)
+class TorrentFile:
+    id: int
+    name: str
+    size: int
+    completed: int
+    wanted: bool
+    priority: str
+
+
+@dataclass(frozen=True, slots=True)
 class TorrentDetails:
     id: int
     name: str
@@ -106,6 +116,48 @@ class TransmissionClient:
     def verify_torrent(self, torrent_id: int) -> None:
         """Ask Transmission to verify the local data for one torrent."""
         self._client.verify_torrent(torrent_id)
+
+    def torrent_files(self, torrent_id: int) -> tuple[str, list[TorrentFile]]:
+        """Return file selection, progress and priority for one torrent."""
+        torrent = self._client.get_torrent(
+            torrent_id,
+            arguments=("id", "name", "files", "priorities", "wanted"),
+        )
+        files: list[TorrentFile] = []
+        for file in torrent.get_files():
+            priority_value = _int(file.priority)
+            priority = {-1: "low", 0: "normal", 1: "high"}.get(
+                priority_value, str(priority_value)
+            )
+            files.append(
+                TorrentFile(
+                    id=_int(file.id),
+                    name=_str(file.name),
+                    size=_int(file.size),
+                    completed=_int(file.completed),
+                    wanted=bool(file.selected),
+                    priority=priority,
+                )
+            )
+        return _str(torrent.name), files
+
+    def set_file_wanted(self, torrent_id: int, file_id: int, *, wanted: bool) -> None:
+        """Enable or disable downloading of one file in a torrent."""
+        if wanted:
+            self._client.change_torrent(torrent_id, files_wanted=[file_id])
+        else:
+            self._client.change_torrent(torrent_id, files_unwanted=[file_id])
+
+    def set_file_priority(self, torrent_id: int, file_id: int, priority: str) -> None:
+        """Set one torrent file to low, normal or high priority."""
+        if priority == "low":
+            self._client.change_torrent(torrent_id, priority_low=[file_id])
+        elif priority == "normal":
+            self._client.change_torrent(torrent_id, priority_normal=[file_id])
+        elif priority == "high":
+            self._client.change_torrent(torrent_id, priority_high=[file_id])
+        else:
+            raise ValueError(f"Unknown file priority: {priority}")
 
     def torrents(self) -> list[TorrentSnapshot]:
         fields = (
