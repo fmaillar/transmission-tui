@@ -5,8 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from transmission_rpc import Client
+
+
+_MAX_TORRENT_SIZE = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +80,15 @@ class TransmissionClient:
         source = source.strip()
         if not source:
             raise ValueError("Torrent URL or magnet link is empty")
-        if not source.startswith(("http://", "https://", "magnet:?")):
+
+        if source.startswith("magnet:?"):
+            torrent_source: str | bytes = source
+        elif source.startswith(("http://", "https://")):
+            torrent_source = _download_torrent(source)
+        else:
             raise ValueError("Expected an http(s) URL or magnet link")
 
-        torrent = self._client.add_torrent(source)
+        torrent = self._client.add_torrent(torrent_source)
         return AddedTorrent(id=_int(torrent.id), name=_str(torrent.name))
 
     def remove_torrent(self, torrent_id: int, *, delete_data: bool = True) -> None:
@@ -192,6 +202,35 @@ class TransmissionClient:
             creator=_str(_attr(torrent, "creator", default="")),
             magnet_link=_str(_attr(torrent, "magnet_link", "magnetLink", default="")),
         )
+
+
+def _download_torrent(url: str) -> bytes:
+    """Download torrent metainfo locally before passing it to Transmission."""
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 transmission-tui/0.1",
+            "Accept": "application/x-bittorrent,application/octet-stream,*/*;q=0.8",
+        },
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None and int(content_length) > _MAX_TORRENT_SIZE:
+                raise ValueError("Torrent file is unexpectedly large")
+            data = response.read(_MAX_TORRENT_SIZE + 1)
+    except HTTPError as exc:
+        raise ValueError(f"HTTP {exc.code}: {exc.reason}") from exc
+    except URLError as exc:
+        raise ValueError(f"Unable to download torrent: {exc.reason}") from exc
+
+    if len(data) > _MAX_TORRENT_SIZE:
+        raise ValueError("Torrent file is unexpectedly large")
+    if not data:
+        raise ValueError("Downloaded torrent file is empty")
+    if not data.startswith(b"d"):
+        raise ValueError("Downloaded content is not a valid torrent file")
+    return data
 
 
 def _int(value: object, *, default: int = 0) -> int:
