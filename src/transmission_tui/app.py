@@ -104,10 +104,23 @@ class TransmissionTUI(App[None]):
 
     def _update_table(self, torrents: list[TorrentSnapshot]) -> None:
         table = self.query_one("#table", DataTable)
+
+        # DataTable.clear() resets the cursor to the first row. Remember the
+        # selected torrent ID so automatic refreshes do not fight navigation.
+        selected_id: str | None = None
+        if table.row_count:
+            try:
+                selected_id = str(table.get_row_at(table.cursor_row)[0])
+            except (IndexError, KeyError):
+                pass
+
         table.clear(columns=False)
-        for torrent in torrents:
+        selected_row: int | None = None
+
+        for row_index, torrent in enumerate(torrents):
+            torrent_id = str(torrent.id)
             table.add_row(
-                str(torrent.id),
+                torrent_id,
                 f"{torrent.progress:.0f}%",
                 human_bytes(torrent.size),
                 human_bytes(torrent.uploaded),
@@ -116,5 +129,10 @@ class TransmissionTUI(App[None]):
                 f"{torrent.ratio:.2f}",
                 torrent.status,
                 torrent.name,
-                key=str(torrent.id),
+                key=torrent_id,
             )
+            if torrent_id == selected_id:
+                selected_row = row_index
+
+        if selected_row is not None:
+            table.move_cursor(row=selected_row)
