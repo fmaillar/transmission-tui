@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from textual.app import ComposeResult
+from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -197,7 +198,7 @@ class TorrentTrackersScreen(Screen[None]):
         failures = 0
 
         for row_index, tracker in enumerate(trackers):
-            if tracker.result not in ("success", "Success", "-", "Success"):
+            if tracker.result not in ("success", "Success", "-"):
                 failures += 1
             table.add_row(
                 str(tracker.id),
@@ -243,9 +244,31 @@ class TransmissionTUI(BaseTransmissionTUI):
         ("t", "show_trackers", "Trackers"),
     ]
 
+    CSS = BaseTransmissionTUI.CSS + """
+    #shortcut-extra {
+        height: 1;
+        padding: 0 1;
+        background: $panel;
+        color: $text-muted;
+    }
+    """
+
     def __init__(self) -> None:
         super().__init__()
         self.rpc = TrackerTransmissionClient()
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical():
+            yield Static("Connecting to Transmission...", id="summary")
+            yield DataTable(id="table", zebra_stripes=True)
+        yield Static(
+            "Enter Details   / Search   f Filter   l Files   b Bandwidth   "
+            "m Move data   t Trackers",
+            id="shortcut-extra",
+            markup=False,
+        )
+        yield Footer()
 
     def action_show_trackers(self) -> None:
         selected = self._selected_torrent()
