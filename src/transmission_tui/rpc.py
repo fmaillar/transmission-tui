@@ -81,6 +81,10 @@ class TransmissionClient:
         torrent = self._client.add_torrent(source)
         return AddedTorrent(id=_int(torrent.id), name=_str(torrent.name))
 
+    def remove_torrent(self, torrent_id: int, *, delete_data: bool = True) -> None:
+        """Remove one torrent, optionally deleting its local data."""
+        self._client.remove_torrent(torrent_id, delete_data=delete_data)
+
     def torrents(self) -> list[TorrentSnapshot]:
         fields = (
             "id",
