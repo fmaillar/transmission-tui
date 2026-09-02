@@ -159,7 +159,7 @@ class ContextTorrentDetailScreen(_ContextScreenMixin, BaseTorrentDetailScreen):
         yield Header()
         yield Static(self._render_details(), id="details", markup=False)
         yield Static(
-            "Esc Back   q Back",
+            "Esc Back",
             id="context-shortcuts",
             markup=False,
         )
@@ -212,7 +212,7 @@ class TorrentTrackersScreen(_ContextScreenMixin, Screen[None]):
         )
         yield DataTable(id="trackers-table", zebra_stripes=True)
         yield Static(
-            "Esc Back   q Back   r Refresh   a Reannounce",
+            "Esc Back   r Refresh   a Reannounce",
             id="context-shortcuts",
             markup=False,
         )
