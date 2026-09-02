@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "transmission-tui"
-version = "0.1.0"
-description = "A lightweight Textual TUI for monitoring Transmission"
+version = "0.2.0"
+description = "A lightweight Textual TUI for monitoring and controlling Transmission"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
