@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "transmission-tui"
+version = "0.1.0"
+description = "A lightweight Textual TUI for monitoring Transmission"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Florian Maillard" }
+]
+dependencies = [
+  "textual>=1.0",
+  "transmission-rpc>=7.0",
+]
+
+[project.scripts]
+transmission-tui = "transmission_tui.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transmission_tui"]
