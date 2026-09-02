@@ -72,6 +72,67 @@ class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
         self.dismiss(added)
 
 
+class DeleteTorrentScreen(ModalScreen[bool]):
+    """Destructive confirmation before deleting a torrent and its data."""
+
+    BINDINGS = [
+        ("y", "confirm", "Delete"),
+        ("n", "cancel", "Cancel"),
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    CSS = """
+    DeleteTorrentScreen {
+        align: center middle;
+    }
+    #delete-box {
+        width: 80%;
+        max-width: 100;
+        height: auto;
+        border: round $error;
+        padding: 1 2;
+        background: $surface;
+    }
+    #delete-title {
+        text-style: bold;
+        color: $error;
+        margin-bottom: 1;
+    }
+    #delete-name {
+        margin-bottom: 1;
+    }
+    #delete-warning {
+        color: $warning;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(self, torrent_id: int, torrent_name: str) -> None:
+        super().__init__()
+        self.torrent_id = torrent_id
+        self.torrent_name = torrent_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="delete-box"):
+            yield Static("Delete torrent and data?", id="delete-title")
+            yield Static(
+                f"Torrent {self.torrent_id}: {self.torrent_name}",
+                id="delete-name",
+                markup=False,
+            )
+            yield Static(
+                "This removes the torrent from Transmission AND deletes its downloaded files.",
+                id="delete-warning",
+            )
+            yield Static("y: delete permanently   n / Esc: cancel")
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 class TorrentDetailScreen(Screen[None]):
     """Read-only detail view for a single torrent."""
 
@@ -170,10 +231,11 @@ class TransmissionTUI(App[None]):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("a", "add_torrent", "Add"),
+        ("d", "delete_torrent", "Delete"),
         ("r", "refresh_now", "Refresh"),
         ("i", "sort_id", "Sort ID"),
         ("u", "sort_up", "Sort Up"),
-        ("d", "sort_down", "Sort Down"),
+        ("D", "sort_down", "Sort Down"),
         ("p", "sort_ratio", "Sort Ratio"),
     ]
 
@@ -225,6 +287,40 @@ class TransmissionTUI(App[None]):
         self.refresh_data()
         self.query_one("#summary", Static).update(
             f"Added torrent {added.id}: {added.name}"
+        )
+
+    def action_delete_torrent(self) -> None:
+        table = self.query_one("#table", DataTable)
+        if not table.row_count:
+            return
+        try:
+            row = table.get_row_at(table.cursor_row)
+            torrent_id = int(str(row[0]))
+            torrent_name = str(row[8])
+        except (IndexError, KeyError, TypeError, ValueError):
+            return
+
+        self.push_screen(
+            DeleteTorrentScreen(torrent_id, torrent_name),
+            lambda confirmed: self._torrent_delete_confirmed(
+                torrent_id, torrent_name, confirmed
+            ),
+        )
+
+    def _torrent_delete_confirmed(
+        self, torrent_id: int, torrent_name: str, confirmed: bool
+    ) -> None:
+        if not confirmed:
+            return
+        try:
+            self.rpc.remove_torrent(torrent_id, delete_data=True)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+
+        self.refresh_data()
+        self.query_one("#summary", Static).update(
+            f"Deleted torrent {torrent_id} and its data: {torrent_name}"
         )
 
     def action_refresh_now(self) -> None:
