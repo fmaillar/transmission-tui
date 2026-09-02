@@ -1,6 +1,6 @@
 """Command-line entry point."""
 
-from .app import TransmissionTUI
+from .location import TransmissionTUI
 
 
 def main() -> None:
