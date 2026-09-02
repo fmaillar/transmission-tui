@@ -11,7 +11,13 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from .format import human_bytes, human_rate
-from .rpc import AddedTorrent, TorrentDetails, TorrentSnapshot, TransmissionClient
+from .rpc import (
+    AddedTorrent,
+    TorrentDetails,
+    TorrentFile,
+    TorrentSnapshot,
+    TransmissionClient,
+)
 
 
 class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
@@ -189,6 +195,132 @@ class RemoveTorrentScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
+class TorrentFilesScreen(Screen[None]):
+    """View and change file selection and priority for one torrent."""
+
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("q", "back", "Back"),
+        ("w", "toggle_wanted", "Wanted"),
+        ("1", "priority_low", "Low"),
+        ("2", "priority_normal", "Normal"),
+        ("3", "priority_high", "High"),
+        ("r", "refresh_files", "Refresh"),
+    ]
+
+    CSS = """
+    #files-summary { height: 2; padding: 0 1; }
+    #files-table { height: 1fr; }
+    """
+
+    def __init__(self, rpc: TransmissionClient, torrent_id: int, torrent_name: str) -> None:
+        super().__init__()
+        self.rpc = rpc
+        self.torrent_id = torrent_id
+        self.torrent_name = torrent_name
+        self.files: list[TorrentFile] = []
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static(f"Torrent {self.torrent_id}: {self.torrent_name}", id="files-summary", markup=False)
+        yield DataTable(id="files-table", zebra_stripes=True)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#files-table", DataTable)
+        table.cursor_type = "row"
+        table.add_columns("ID", "Wanted", "Priority", "Done", "Size", "Name")
+        self.action_refresh_files()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def _selected_file(self) -> TorrentFile | None:
+        table = self.query_one("#files-table", DataTable)
+        if not table.row_count:
+            return None
+        try:
+            file_id = int(str(table.get_row_at(table.cursor_row)[0]))
+        except (IndexError, KeyError, TypeError, ValueError):
+            return None
+        return next((file for file in self.files if file.id == file_id), None)
+
+    def action_refresh_files(self) -> None:
+        table = self.query_one("#files-table", DataTable)
+        selected_id: int | None = None
+        if table.row_count:
+            try:
+                selected_id = int(str(table.get_row_at(table.cursor_row)[0]))
+            except (IndexError, KeyError, TypeError, ValueError):
+                pass
+
+        try:
+            torrent_name, files = self.rpc.torrent_files(self.torrent_id)
+        except Exception as exc:
+            self.query_one("#files-summary", Static).update(f"RPC error: {exc}")
+            return
+
+        self.torrent_name = torrent_name
+        self.files = files
+        table.clear(columns=False)
+        selected_row: int | None = None
+
+        for row_index, file in enumerate(files):
+            progress = (file.completed / file.size * 100.0) if file.size else 100.0
+            table.add_row(
+                str(file.id),
+                "yes" if file.wanted else "no",
+                file.priority,
+                f"{progress:.0f}%",
+                human_bytes(file.size),
+                file.name,
+                key=str(file.id),
+            )
+            if file.id == selected_id:
+                selected_row = row_index
+
+        if selected_row is not None:
+            table.move_cursor(row=selected_row)
+
+        wanted_count = sum(file.wanted for file in files)
+        self.query_one("#files-summary", Static).update(
+            f"Torrent {self.torrent_id}: {self.torrent_name}\n"
+            f"Files: {len(files)}  Wanted: {wanted_count}  "
+            "w toggle  1 low  2 normal  3 high"
+        )
+
+    def action_toggle_wanted(self) -> None:
+        file = self._selected_file()
+        if file is None:
+            return
+        try:
+            self.rpc.set_file_wanted(self.torrent_id, file.id, wanted=not file.wanted)
+        except Exception as exc:
+            self.query_one("#files-summary", Static).update(f"RPC error: {exc}")
+            return
+        self.action_refresh_files()
+
+    def _set_priority(self, priority: str) -> None:
+        file = self._selected_file()
+        if file is None:
+            return
+        try:
+            self.rpc.set_file_priority(self.torrent_id, file.id, priority)
+        except Exception as exc:
+            self.query_one("#files-summary", Static).update(f"RPC error: {exc}")
+            return
+        self.action_refresh_files()
+
+    def action_priority_low(self) -> None:
+        self._set_priority("low")
+
+    def action_priority_normal(self) -> None:
+        self._set_priority("normal")
+
+    def action_priority_high(self) -> None:
+        self._set_priority("high")
+
+
 class TorrentDetailScreen(Screen[None]):
     """Read-only detail view for a single torrent."""
 
@@ -291,6 +423,7 @@ class TransmissionTUI(App[None]):
         ("a", "add_torrent", "Add"),
         ("/", "search_torrents", "Search"),
         ("f", "cycle_filter", "Filter"),
+        ("l", "show_files", "Files"),
         ("space", "toggle_pause", "Pause/Resume"),
         ("v", "verify_torrent", "Verify"),
         ("x", "remove_torrent", "Remove"),
@@ -388,6 +521,13 @@ class TransmissionTUI(App[None]):
         index = self.FILTERS.index(self.filter_name)
         self.filter_name = self.FILTERS[(index + 1) % len(self.FILTERS)]
         self.refresh_data()
+
+    def action_show_files(self) -> None:
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, torrent_name, _ = selected
+        self.push_screen(TorrentFilesScreen(self.rpc, torrent_id, torrent_name))
 
     def action_toggle_pause(self) -> None:
         selected = self._selected_torrent()
