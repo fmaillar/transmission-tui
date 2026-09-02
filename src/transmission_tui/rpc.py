@@ -123,6 +123,15 @@ class TransmissionClient:
         """Ask Transmission to verify the local data for one torrent."""
         self._client.verify_torrent(torrent_id)
 
+    def move_torrent_data(self, torrent_id: int, location: str) -> None:
+        """Move one torrent's local data to a new directory."""
+        location = location.strip()
+        if not location:
+            raise ValueError("Destination directory is empty")
+        if not location.startswith("/"):
+            raise ValueError("Destination must be an absolute path")
+        self._client.move_torrent_data(torrent_id, location, move=True)
+
     def torrent_limits(self, torrent_id: int) -> TorrentLimits:
         """Return current per-torrent download/upload limits in kB/s."""
         torrent = self._client.get_torrent(
