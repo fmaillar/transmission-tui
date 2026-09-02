@@ -1,14 +1,23 @@
 # transmission-tui
 
-A lightweight terminal user interface for monitoring a Transmission daemon.
+A lightweight terminal user interface for monitoring and controlling a Transmission daemon.
 
 ## Features
 
-- Live torrent list refreshed every second
+- Live torrent list refreshed every second without losing cursor position
 - Size, uploaded data, current download/upload rates and ratio
 - Aggregate totals in the header
-- Sortable table
-- Read-only first release: no destructive actions
+- Search and status filters
+- Sort by ID, upload rate, download rate or ratio
+- Torrent details view
+- Add torrents from magnet links or HTTP(S) `.torrent` URLs
+- Pause/resume and verification
+- Remove torrents while keeping data, or delete torrent and data with confirmation
+- Per-torrent file selection and priority management
+- Per-torrent upload/download bandwidth limits
+- Move torrent data to another absolute path
+- Tracker diagnostics and manual reannounce
+- Context-sensitive shortcut bars
 
 ## Requirements
 
@@ -17,10 +26,17 @@ A lightweight terminal user interface for monitoring a Transmission daemon.
 
 ## Installation
 
+With `uv`:
+
 ```bash
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+uv tool install .
+```
+
+For development:
+
+```bash
+uv sync
+uv run transmission-tui
 ```
 
 ## Usage
@@ -47,18 +63,32 @@ TRANSMISSION_PASSWORD=secret \
 transmission-tui
 ```
 
-## Keys
+## Main keys
 
-- `q`: quit
+- `Enter`: torrent details
+- `a`: add torrent
+- `/`: search torrents
+- `f`: cycle status filter
+- `l`: files
+- `b`: bandwidth limits
+- `m`: move data
+- `t`: trackers
+- `Space`: pause/resume
+- `v`: verify
+- `x`: remove torrent and keep data
+- `d`: delete torrent and data
 - `r`: refresh immediately
 - `i`: sort by torrent ID
 - `u`: sort by upload rate
-- `d`: sort by download rate
+- `D`: sort by download rate
 - `p`: sort by ratio
+- `q`: quit
 
-## Scope
+Subview shortcut bars only show actions relevant to the current view.
 
-Version 0.1 is intentionally read-only. Pause/resume, verification and removal can be added later once the monitoring layer is stable.
+## Version 0.2.0
+
+Version 0.2.0 turns the initial read-only monitor into a practical Transmission management TUI. It adds torrent lifecycle controls, file management, bandwidth limits, data relocation, search/filtering, tracker diagnostics and a cleaner context-sensitive interface.
 
 ## License
 
