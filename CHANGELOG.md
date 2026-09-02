@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Let `Enter` submit the Add torrent dialog instead of opening torrent details
+
 ## 0.2.0 — 2026-09-02
 
 ### Added
