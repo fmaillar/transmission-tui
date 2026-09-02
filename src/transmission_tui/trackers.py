@@ -171,25 +171,6 @@ class ContextTorrentDetailScreen(_ContextScreenMixin, BaseTorrentDetailScreen):
         self._restore_main_footer()
 
 
-def _open_context_details(
-    self: BaseTransmissionTUI, event: DataTable.RowSelected
-) -> None:
-    """Open one contextual details screen for a selected torrent row."""
-    try:
-        torrent_id = int(str(event.row_key.value))
-        details = self.rpc.torrent_details(torrent_id)
-    except Exception as exc:
-        self.query_one("#summary", Static).update(f"RPC error: {exc}")
-        return
-    self.push_screen(ContextTorrentDetailScreen(details))
-
-
-# Replace the inherited row-selection handler instead of adding a second handler
-# in the subclass. Textual walks handlers through the class hierarchy, so two
-# methods with the same message name would otherwise push two Details screens.
-BaseTransmissionTUI.on_data_table_row_selected = _open_context_details
-
-
 class TorrentTrackersScreen(_ContextScreenMixin, Screen[None]):
     """Display tracker state for one torrent and allow manual reannounce."""
 
@@ -324,6 +305,7 @@ class TransmissionTUI(BaseTransmissionTUI):
     # Primary actions stay in Textual's Footer. Navigation and secondary
     # management commands are shown in our dedicated line above it instead.
     BINDINGS = [
+        Binding("enter", "open_details", "Details", show=False, priority=True),
         Binding("q", "quit", "Quit"),
         Binding("a", "add_torrent", "Add"),
         Binding("space", "toggle_pause", "Pause/Resume"),
@@ -368,6 +350,19 @@ class TransmissionTUI(BaseTransmissionTUI):
             markup=False,
         )
         yield Footer()
+
+    def action_open_details(self) -> None:
+        """Open exactly one Details screen for the selected torrent."""
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, _, _ = selected
+        try:
+            details = self.rpc.torrent_details(torrent_id)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        self.push_screen(ContextTorrentDetailScreen(details))
 
     def action_show_trackers(self) -> None:
         selected = self._selected_torrent()
