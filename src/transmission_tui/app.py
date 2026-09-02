@@ -6,6 +6,7 @@ from operator import attrgetter
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
+from textual.coordinate import Coordinate
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -128,6 +129,7 @@ class TransmissionTUI(App[None]):
         self.rpc = TransmissionClient()
         self.sort_key = "id"
         self.sort_reverse = False
+        self._row_order: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -204,12 +206,38 @@ class TransmissionTUI(App[None]):
         )
         self.query_one("#summary", Static).update(text)
 
+    @staticmethod
+    def _row_values(torrent: TorrentSnapshot) -> tuple[str, ...]:
+        return (
+            str(torrent.id),
+            f"{torrent.progress:.0f}%",
+            human_bytes(torrent.size),
+            human_bytes(torrent.uploaded),
+            human_rate(torrent.rate_down),
+            human_rate(torrent.rate_up),
+            f"{torrent.ratio:.2f}",
+            torrent.status,
+            torrent.name,
+        )
+
     def _update_table(self, torrents: list[TorrentSnapshot]) -> None:
         table = self.query_one("#table", DataTable)
+        new_order = [str(torrent.id) for torrent in torrents]
 
-        # Rebuilding the table resets both cursor and viewport. Preserve the
-        # selected torrent and vertical scroll position so periodic refreshes
-        # remain visually stable while navigating deep in the list.
+        # The normal one-second refresh keeps the same torrents in the same
+        # order. Update cells in place in that case: no clear(), no relayout,
+        # and therefore no visible scroll/cursor jump.
+        if table.row_count == len(torrents) and new_order == self._row_order:
+            for row_index, torrent in enumerate(torrents):
+                for column_index, value in enumerate(self._row_values(torrent)):
+                    coordinate = Coordinate(row_index, column_index)
+                    if table.get_cell_at(coordinate) != value:
+                        table.update_cell_at(coordinate, value)
+            return
+
+        # Only rebuild when torrents are added/removed or the requested sort
+        # order actually changes. Preserve the selected torrent and viewport
+        # for those comparatively rare structural updates.
         selected_id: str | None = None
         saved_scroll_y = table.scroll_y
         if table.row_count:
@@ -223,26 +251,15 @@ class TransmissionTUI(App[None]):
 
         for row_index, torrent in enumerate(torrents):
             torrent_id = str(torrent.id)
-            table.add_row(
-                torrent_id,
-                f"{torrent.progress:.0f}%",
-                human_bytes(torrent.size),
-                human_bytes(torrent.uploaded),
-                human_rate(torrent.rate_down),
-                human_rate(torrent.rate_up),
-                f"{torrent.ratio:.2f}",
-                torrent.status,
-                torrent.name,
-                key=torrent_id,
-            )
+            table.add_row(*self._row_values(torrent), key=torrent_id)
             if torrent_id == selected_id:
                 selected_row = row_index
+
+        self._row_order = new_order
 
         if selected_row is not None:
             table.move_cursor(row=selected_row)
 
-        # move_cursor() may scroll the selected row into view. Restore the
-        # previous viewport after Textual has processed the rebuilt rows.
         self.call_after_refresh(
             lambda: table.scroll_to(y=saved_scroll_y, animate=False)
         )
