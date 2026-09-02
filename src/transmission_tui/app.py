@@ -207,9 +207,11 @@ class TransmissionTUI(App[None]):
     def _update_table(self, torrents: list[TorrentSnapshot]) -> None:
         table = self.query_one("#table", DataTable)
 
-        # DataTable.clear() resets the cursor to the first row. Remember the
-        # selected torrent ID so automatic refreshes do not fight navigation.
+        # Rebuilding the table resets both cursor and viewport. Preserve the
+        # selected torrent and vertical scroll position so periodic refreshes
+        # remain visually stable while navigating deep in the list.
         selected_id: str | None = None
+        saved_scroll_y = table.scroll_y
         if table.row_count:
             try:
                 selected_id = str(table.get_row_at(table.cursor_row)[0])
@@ -238,3 +240,9 @@ class TransmissionTUI(App[None]):
 
         if selected_row is not None:
             table.move_cursor(row=selected_row)
+
+        # move_cursor() may scroll the selected row into view. Restore the
+        # previous viewport after Textual has processed the rebuilt rows.
+        self.call_after_refresh(
+            lambda: table.scroll_to(y=saved_scroll_y, animate=False)
+        )
