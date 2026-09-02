@@ -470,7 +470,11 @@ class TransmissionTUI(App[None]):
                 for column_index, value in enumerate(self._row_values(torrent)):
                     coordinate = Coordinate(row_index, column_index)
                     if table.get_cell_at(coordinate) != value:
-                        table.update_cell_at(coordinate, value)
+                        table.update_cell_at(
+                            coordinate,
+                            value,
+                            update_width=column_index in (4, 5),
+                        )
             return
 
         # Structural refresh after add/remove/sort: rebuild while preserving
