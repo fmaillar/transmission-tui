@@ -85,6 +85,18 @@ class TransmissionClient:
         """Remove one torrent, optionally deleting its local data."""
         self._client.remove_torrent(torrent_id, delete_data=delete_data)
 
+    def start_torrent(self, torrent_id: int) -> None:
+        """Start or resume one torrent."""
+        self._client.start_torrent(torrent_id)
+
+    def stop_torrent(self, torrent_id: int) -> None:
+        """Pause one torrent."""
+        self._client.stop_torrent(torrent_id)
+
+    def verify_torrent(self, torrent_id: int) -> None:
+        """Ask Transmission to verify the local data for one torrent."""
+        self._client.verify_torrent(torrent_id)
+
     def torrents(self) -> list[TorrentSnapshot]:
         fields = (
             "id",
