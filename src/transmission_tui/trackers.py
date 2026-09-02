@@ -171,6 +171,25 @@ class ContextTorrentDetailScreen(_ContextScreenMixin, BaseTorrentDetailScreen):
         self._restore_main_footer()
 
 
+def _open_context_details(
+    self: BaseTransmissionTUI, event: DataTable.RowSelected
+) -> None:
+    """Open one contextual details screen for a selected torrent row."""
+    try:
+        torrent_id = int(str(event.row_key.value))
+        details = self.rpc.torrent_details(torrent_id)
+    except Exception as exc:
+        self.query_one("#summary", Static).update(f"RPC error: {exc}")
+        return
+    self.push_screen(ContextTorrentDetailScreen(details))
+
+
+# Replace the inherited row-selection handler instead of adding a second handler
+# in the subclass. Textual walks handlers through the class hierarchy, so two
+# methods with the same message name would otherwise push two Details screens.
+BaseTransmissionTUI.on_data_table_row_selected = _open_context_details
+
+
 class TorrentTrackersScreen(_ContextScreenMixin, Screen[None]):
     """Display tracker state for one torrent and allow manual reannounce."""
 
@@ -349,17 +368,6 @@ class TransmissionTUI(BaseTransmissionTUI):
             markup=False,
         )
         yield Footer()
-
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Open exactly one contextual details view for the selected torrent."""
-        event.stop()
-        try:
-            torrent_id = int(str(event.row_key.value))
-            details = self.rpc.torrent_details(torrent_id)
-        except Exception as exc:
-            self.query_one("#summary", Static).update(f"RPC error: {exc}")
-            return
-        self.push_screen(ContextTorrentDetailScreen(details))
 
     def action_show_trackers(self) -> None:
         selected = self._selected_torrent()
