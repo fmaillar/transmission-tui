@@ -74,6 +74,53 @@ class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
         self.dismiss(added)
 
 
+class SearchTorrentScreen(ModalScreen[str | None]):
+    """Prompt for a case-insensitive torrent-name search."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    CSS = """
+    SearchTorrentScreen { align: center middle; }
+    #search-box {
+        width: 70%;
+        max-width: 90;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #search-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(self, current_query: str) -> None:
+        super().__init__()
+        self.current_query = current_query
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="search-box"):
+            yield Static("Search torrents by name", id="search-title")
+            yield Input(
+                value=self.current_query,
+                placeholder="Type part of a torrent name…",
+                id="search-query",
+            )
+            yield Static("Enter: apply   empty Enter: clear   Esc: cancel")
+
+    def on_mount(self) -> None:
+        search = self.query_one("#search-query", Input)
+        search.focus()
+        search.action_end()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip())
+
+
 class RemoveTorrentScreen(ModalScreen[bool]):
     """Confirmation before removing a torrent, optionally with its data."""
 
@@ -237,9 +284,13 @@ class TransmissionTUI(App[None]):
     TITLE = "Transmission TUI"
     SUB_TITLE = "monitor and control"
 
+    FILTERS = ("all", "active", "downloading", "seeding", "stopped")
+
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("a", "add_torrent", "Add"),
+        ("/", "search_torrents", "Search"),
+        ("f", "cycle_filter", "Filter"),
         ("space", "toggle_pause", "Pause/Resume"),
         ("v", "verify_torrent", "Verify"),
         ("x", "remove_torrent", "Remove"),
@@ -262,6 +313,8 @@ class TransmissionTUI(App[None]):
         self.rpc = TransmissionClient()
         self.sort_key = "id"
         self.sort_reverse = False
+        self.filter_name = "all"
+        self.search_query = ""
         self._row_order: list[str] = []
 
     def compose(self) -> ComposeResult:
@@ -318,6 +371,23 @@ class TransmissionTUI(App[None]):
         self.query_one("#summary", Static).update(
             f"Added torrent {added.id}: {added.name}"
         )
+
+    def action_search_torrents(self) -> None:
+        self.push_screen(
+            SearchTorrentScreen(self.search_query),
+            self._search_applied,
+        )
+
+    def _search_applied(self, query: str | None) -> None:
+        if query is None:
+            return
+        self.search_query = query
+        self.refresh_data()
+
+    def action_cycle_filter(self) -> None:
+        index = self.FILTERS.index(self.filter_name)
+        self.filter_name = self.FILTERS[(index + 1) % len(self.FILTERS)]
+        self.refresh_data()
 
     def action_toggle_pause(self) -> None:
         selected = self._selected_torrent()
@@ -422,26 +492,61 @@ class TransmissionTUI(App[None]):
 
     def refresh_data(self) -> None:
         try:
-            torrents = self.rpc.torrents()
+            all_torrents = self.rpc.torrents()
         except Exception as exc:  # RPC/network errors must not kill the TUI
             self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
 
+        torrents = self._filter_torrents(all_torrents)
         torrents.sort(key=attrgetter(self.sort_key), reverse=self.sort_reverse)
-        self._update_summary(torrents)
+        self._update_summary(all_torrents, torrents)
         self._update_table(torrents)
 
-    def _update_summary(self, torrents: list[TorrentSnapshot]) -> None:
-        size = sum(t.size for t in torrents)
-        uploaded = sum(t.uploaded for t in torrents)
-        down = sum(t.rate_down for t in torrents)
-        up = sum(t.rate_up for t in torrents)
+    def _filter_torrents(
+        self, torrents: list[TorrentSnapshot]
+    ) -> list[TorrentSnapshot]:
+        query = self.search_query.casefold()
+        filtered: list[TorrentSnapshot] = []
+
+        for torrent in torrents:
+            if query and query not in torrent.name.casefold():
+                continue
+
+            if self.filter_name == "active":
+                if not (torrent.rate_down or torrent.rate_up):
+                    continue
+            elif self.filter_name == "downloading":
+                if torrent.status != "downloading":
+                    continue
+            elif self.filter_name == "seeding":
+                if torrent.status != "seeding":
+                    continue
+            elif self.filter_name == "stopped":
+                if torrent.status != "stopped":
+                    continue
+
+            filtered.append(torrent)
+
+        return filtered
+
+    def _update_summary(
+        self,
+        all_torrents: list[TorrentSnapshot],
+        torrents: list[TorrentSnapshot],
+    ) -> None:
+        size = sum(t.size for t in all_torrents)
+        uploaded = sum(t.uploaded for t in all_torrents)
+        down = sum(t.rate_down for t in all_torrents)
+        up = sum(t.rate_up for t in all_torrents)
         ratio = uploaded / size if size else 0.0
-        active = sum(bool(t.rate_down or t.rate_up) for t in torrents)
+        active = sum(bool(t.rate_down or t.rate_up) for t in all_torrents)
+        search = f"  Search: {self.search_query}" if self.search_query else ""
         text = (
-            f"Torrents: {len(torrents)}  Active: {active}  "
+            f"Torrents: {len(torrents)}/{len(all_torrents)}  Active: {active}  "
             f"Size: {human_bytes(size)}  Uploaded: {human_bytes(uploaded)}  "
-            f"Ratio: {ratio:.2f}\nDown: {human_rate(down)}  Up: {human_rate(up)}  "
+            f"Ratio: {ratio:.2f}\n"
+            f"Down: {human_rate(down)}  Up: {human_rate(up)}  "
+            f"Filter: {self.filter_name}{search}  "
             f"Sort: {self.sort_key}{' desc' if self.sort_reverse else ' asc'}"
         )
         self.query_one("#summary", Static).update(text)
@@ -477,8 +582,8 @@ class TransmissionTUI(App[None]):
                         )
             return
 
-        # Structural refresh after add/remove/sort: rebuild while preserving
-        # the selected torrent and viewport.
+        # Structural refresh after add/remove/filter/sort: rebuild while
+        # preserving the selected torrent and viewport where possible.
         selected_id: str | None = None
         saved_scroll_y = table.scroll_y
         if table.row_count:
