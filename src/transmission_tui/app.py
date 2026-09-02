@@ -6,10 +6,102 @@ from operator import attrgetter
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
 from .format import human_bytes, human_rate
-from .rpc import TorrentSnapshot, TransmissionClient
+from .rpc import TorrentDetails, TorrentSnapshot, TransmissionClient
+
+
+class TorrentDetailScreen(Screen[None]):
+    """Read-only detail view for a single torrent."""
+
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("q", "back", "Back"),
+    ]
+
+    CSS = """
+    #details {
+        height: 1fr;
+        padding: 1 2;
+        overflow-y: auto;
+        overflow-x: auto;
+    }
+    """
+
+    def __init__(self, details: TorrentDetails) -> None:
+        super().__init__()
+        self.details = details
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static(self._render_details(), id="details", markup=False)
+        yield Footer()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def _render_details(self) -> str:
+        torrent = self.details
+        return "\n".join(
+            (
+                f"Torrent {torrent.id}: {torrent.name}",
+                "",
+                "TRANSFER",
+                f"  Status:             {torrent.status}",
+                f"  Progress:           {torrent.progress:.2f}%",
+                f"  Total size:         {human_bytes(torrent.total_size)}",
+                f"  Size when done:     {human_bytes(torrent.size_when_done)}",
+                f"  Have valid:         {human_bytes(torrent.have_valid)}",
+                f"  Downloaded:         {human_bytes(torrent.downloaded)}",
+                f"  Uploaded:           {human_bytes(torrent.uploaded)}",
+                f"  Ratio:              {torrent.ratio:.2f}",
+                f"  Download speed:     {human_rate(torrent.rate_down)}",
+                f"  Upload speed:       {human_rate(torrent.rate_up)}",
+                f"  ETA:                {_human_eta(torrent.eta)}",
+                "",
+                "PEERS",
+                f"  Connected:          {torrent.peers_connected}",
+                f"  Downloading from us:{torrent.peers_downloading:>4}",
+                f"  Uploading to us:    {torrent.peers_uploading:>4}",
+                f"  Webseeds active:    {torrent.webseeds_sending:>4}",
+                "",
+                "LOCATION",
+                f"  Download directory: {torrent.download_dir}",
+                f"  Hash:               {torrent.hash_string}",
+                "",
+                "HISTORY",
+                f"  Added:              {torrent.added_date}",
+                f"  Started:            {torrent.start_date}",
+                f"  Completed:          {torrent.done_date}",
+                f"  Last activity:      {torrent.activity_date}",
+                "",
+                "ORIGIN",
+                f"  Creator:            {torrent.creator or '-'}",
+                f"  Comment:            {torrent.comment or '-'}",
+                "",
+                "MAGNET",
+                f"  {torrent.magnet_link or '-'}",
+            )
+        )
+
+
+def _human_eta(seconds: int) -> str:
+    if seconds < 0:
+        return "Unknown"
+    if seconds == 0:
+        return "Done"
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if days:
+        return f"{days}d {hours}h {minutes}m"
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
 
 
 class TransmissionTUI(App[None]):
@@ -52,6 +144,16 @@ class TransmissionTUI(App[None]):
         )
         self.set_interval(1.0, self.refresh_data)
         self.refresh_data()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open details when Enter is pressed on a torrent row."""
+        try:
+            torrent_id = int(str(event.row_key.value))
+            details = self.rpc.torrent_details(torrent_id)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        self.push_screen(TorrentDetailScreen(details))
 
     def action_refresh_now(self) -> None:
         self.refresh_data()
