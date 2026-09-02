@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
@@ -239,9 +240,26 @@ class TorrentTrackersScreen(Screen[None]):
 class TransmissionTUI(BaseTransmissionTUI):
     """Transmission TUI with tracker diagnostics."""
 
+    # Primary actions stay in Textual's Footer. Navigation and secondary
+    # management commands are shown in our dedicated line above it instead.
     BINDINGS = [
-        *BaseTransmissionTUI.BINDINGS,
-        ("t", "show_trackers", "Trackers"),
+        Binding("q", "quit", "Quit"),
+        Binding("a", "add_torrent", "Add"),
+        Binding("space", "toggle_pause", "Pause/Resume"),
+        Binding("v", "verify_torrent", "Verify"),
+        Binding("x", "remove_torrent", "Remove"),
+        Binding("d", "delete_torrent", "Delete data"),
+        Binding("r", "refresh_now", "Refresh"),
+        Binding("i", "sort_id", "Sort ID"),
+        Binding("u", "sort_up", "Sort Up"),
+        Binding("D", "sort_down", "Sort Down"),
+        Binding("p", "sort_ratio", "Sort Ratio"),
+        Binding("/", "search_torrents", "Search", show=False),
+        Binding("f", "cycle_filter", "Filter", show=False),
+        Binding("l", "show_files", "Files", show=False),
+        Binding("b", "bandwidth", "Bandwidth", show=False),
+        Binding("m", "move_location", "Move data", show=False),
+        Binding("t", "show_trackers", "Trackers", show=False),
     ]
 
     CSS = BaseTransmissionTUI.CSS + """
