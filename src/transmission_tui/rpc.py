@@ -23,6 +23,12 @@ class TorrentSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class AddedTorrent:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class TorrentDetails:
     id: int
     name: str
@@ -53,7 +59,7 @@ class TorrentDetails:
 
 
 class TransmissionClient:
-    """Read-only Transmission RPC client used by the TUI."""
+    """Small adapter around the Transmission RPC client."""
 
     def __init__(self) -> None:
         self._client = Client(
@@ -63,6 +69,17 @@ class TransmissionClient:
             password=os.environ.get("TRANSMISSION_PASSWORD") or None,
             timeout=5.0,
         )
+
+    def add_torrent(self, source: str) -> AddedTorrent:
+        """Add an HTTP(S) torrent URL or magnet link."""
+        source = source.strip()
+        if not source:
+            raise ValueError("Torrent URL or magnet link is empty")
+        if not source.startswith(("http://", "https://", "magnet:?")):
+            raise ValueError("Expected an http(s) URL or magnet link")
+
+        torrent = self._client.add_torrent(source)
+        return AddedTorrent(id=_int(torrent.id), name=_str(torrent.name))
 
     def torrents(self) -> list[TorrentSnapshot]:
         fields = (
