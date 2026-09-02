@@ -572,8 +572,15 @@ class TransmissionTUI(App[None]):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Open details when Enter is pressed on a torrent row."""
+        self.action_open_details()
+
+    def action_open_details(self) -> None:
+        """Open the details screen for the selected torrent."""
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, _, _ = selected
         try:
-            torrent_id = int(str(event.row_key.value))
             details = self.rpc.torrent_details(torrent_id)
         except Exception as exc:
             self.query_one("#summary", Static).update(f"RPC error: {exc}")

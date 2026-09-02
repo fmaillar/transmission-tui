@@ -305,7 +305,6 @@ class TransmissionTUI(BaseTransmissionTUI):
     # Primary actions stay in Textual's Footer. Navigation and secondary
     # management commands are shown in our dedicated line above it instead.
     BINDINGS = [
-        Binding("enter", "open_details", "Details", show=False, priority=True),
         Binding("q", "quit", "Quit"),
         Binding("a", "add_torrent", "Add"),
         Binding("space", "toggle_pause", "Pause/Resume"),
