@@ -15,6 +15,7 @@ from .rpc import (
     AddedTorrent,
     TorrentDetails,
     TorrentFile,
+    TorrentLimits,
     TorrentSnapshot,
     TransmissionClient,
 )
@@ -127,6 +128,96 @@ class SearchTorrentScreen(ModalScreen[str | None]):
         self.dismiss(event.value.strip())
 
 
+class BandwidthScreen(ModalScreen[TorrentLimits | None]):
+    """Edit download/upload limits for one torrent."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    CSS = """
+    BandwidthScreen { align: center middle; }
+    #bandwidth-box {
+        width: 72%;
+        max-width: 90;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #bandwidth-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    #bandwidth-error {
+        min-height: 1;
+        color: $error;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        torrent_id: int,
+        torrent_name: str,
+        limits: TorrentLimits,
+    ) -> None:
+        super().__init__()
+        self.torrent_id = torrent_id
+        self.torrent_name = torrent_name
+        self.limits = limits
+
+    def compose(self) -> ComposeResult:
+        download = self.limits.download or 0
+        upload = self.limits.upload or 0
+        with Vertical(id="bandwidth-box"):
+            yield Static(
+                f"Bandwidth — torrent {self.torrent_id}: {self.torrent_name}",
+                id="bandwidth-title",
+                markup=False,
+            )
+            yield Static("Enter limits in kB/s. 0 means unlimited.")
+            yield Input(
+                value=f"{download} {upload}",
+                placeholder="download upload   e.g. 5000 1000",
+                id="bandwidth-values",
+            )
+            yield Static("Enter: apply   Esc: cancel")
+            yield Static("", id="bandwidth-error")
+
+    def on_mount(self) -> None:
+        field = self.query_one("#bandwidth-values", Input)
+        field.focus()
+        field.action_end()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        parts = event.value.split()
+        if len(parts) != 2:
+            self.query_one("#bandwidth-error", Static).update(
+                "Expected two integers: download upload"
+            )
+            return
+        try:
+            download_value, upload_value = (int(part) for part in parts)
+        except ValueError:
+            self.query_one("#bandwidth-error", Static).update(
+                "Limits must be integers in kB/s"
+            )
+            return
+        if download_value < 0 or upload_value < 0:
+            self.query_one("#bandwidth-error", Static).update(
+                "Limits cannot be negative"
+            )
+            return
+        self.dismiss(
+            TorrentLimits(
+                download=download_value or None,
+                upload=upload_value or None,
+            )
+        )
+
+
 class RemoveTorrentScreen(ModalScreen[bool]):
     """Confirmation before removing a torrent, optionally with its data."""
 
@@ -222,7 +313,11 @@ class TorrentFilesScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(f"Torrent {self.torrent_id}: {self.torrent_name}", id="files-summary", markup=False)
+        yield Static(
+            f"Torrent {self.torrent_id}: {self.torrent_name}",
+            id="files-summary",
+            markup=False,
+        )
         yield DataTable(id="files-table", zebra_stripes=True)
         yield Footer()
 
@@ -424,6 +519,7 @@ class TransmissionTUI(App[None]):
         ("/", "search_torrents", "Search"),
         ("f", "cycle_filter", "Filter"),
         ("l", "show_files", "Files"),
+        ("b", "bandwidth", "Bandwidth"),
         ("space", "toggle_pause", "Pause/Resume"),
         ("v", "verify_torrent", "Verify"),
         ("x", "remove_torrent", "Remove"),
@@ -528,6 +624,46 @@ class TransmissionTUI(App[None]):
             return
         torrent_id, torrent_name, _ = selected
         self.push_screen(TorrentFilesScreen(self.rpc, torrent_id, torrent_name))
+
+    def action_bandwidth(self) -> None:
+        selected = self._selected_torrent()
+        if selected is None:
+            return
+        torrent_id, torrent_name, _ = selected
+        try:
+            limits = self.rpc.torrent_limits(torrent_id)
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        self.push_screen(
+            BandwidthScreen(torrent_id, torrent_name, limits),
+            lambda new_limits: self._bandwidth_applied(
+                torrent_id, torrent_name, new_limits
+            ),
+        )
+
+    def _bandwidth_applied(
+        self,
+        torrent_id: int,
+        torrent_name: str,
+        limits: TorrentLimits | None,
+    ) -> None:
+        if limits is None:
+            return
+        try:
+            self.rpc.set_torrent_limits(
+                torrent_id,
+                download=limits.download,
+                upload=limits.upload,
+            )
+        except Exception as exc:
+            self.query_one("#summary", Static).update(f"RPC error: {exc}")
+            return
+        down = f"{limits.download} kB/s" if limits.download else "unlimited"
+        up = f"{limits.upload} kB/s" if limits.upload else "unlimited"
+        self.query_one("#summary", Static).update(
+            f"Bandwidth {torrent_id}: {torrent_name} — down {down}, up {up}"
+        )
 
     def action_toggle_pause(self) -> None:
         selected = self._selected_torrent()
@@ -709,7 +845,6 @@ class TransmissionTUI(App[None]):
         table = self.query_one("#table", DataTable)
         new_order = [str(torrent.id) for torrent in torrents]
 
-        # Normal refresh: update cells in place to keep the viewport stable.
         if table.row_count == len(torrents) and new_order == self._row_order:
             for row_index, torrent in enumerate(torrents):
                 for column_index, value in enumerate(self._row_values(torrent)):
@@ -722,8 +857,6 @@ class TransmissionTUI(App[None]):
                         )
             return
 
-        # Structural refresh after add/remove/filter/sort: rebuild while
-        # preserving the selected torrent and viewport where possible.
         selected_id: str | None = None
         saved_scroll_y = table.scroll_y
         if table.row_count:
