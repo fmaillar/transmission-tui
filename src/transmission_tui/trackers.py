@@ -351,7 +351,8 @@ class TransmissionTUI(BaseTransmissionTUI):
         yield Footer()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Open the contextual details view for the selected torrent."""
+        """Open exactly one contextual details view for the selected torrent."""
+        event.stop()
         try:
             torrent_id = int(str(event.row_key.value))
             details = self.rpc.torrent_details(torrent_id)
