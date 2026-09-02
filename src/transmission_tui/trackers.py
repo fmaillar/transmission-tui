@@ -124,7 +124,26 @@ class TrackerTransmissionClient(BaseTransmissionClient):
         self._client.reannounce_torrent(torrent_id)
 
 
-class ContextTorrentDetailScreen(BaseTorrentDetailScreen):
+class _ContextScreenMixin:
+    """Hide the main application's docked footer while a subview is open."""
+
+    _main_footer: Footer | None = None
+
+    def _hide_main_footer(self) -> None:
+        try:
+            footer = self.app.query_one(Footer)
+        except Exception:
+            return
+        self._main_footer = footer
+        footer.display = False
+
+    def _restore_main_footer(self) -> None:
+        if self._main_footer is not None:
+            self._main_footer.display = True
+            self._main_footer = None
+
+
+class ContextTorrentDetailScreen(_ContextScreenMixin, BaseTorrentDetailScreen):
     """Torrent details with only the shortcuts valid in this view."""
 
     CSS = BaseTorrentDetailScreen.CSS + """
@@ -145,8 +164,14 @@ class ContextTorrentDetailScreen(BaseTorrentDetailScreen):
             markup=False,
         )
 
+    def on_mount(self) -> None:
+        self._hide_main_footer()
 
-class TorrentTrackersScreen(Screen[None]):
+    def on_unmount(self) -> None:
+        self._restore_main_footer()
+
+
+class TorrentTrackersScreen(_ContextScreenMixin, Screen[None]):
     """Display tracker state for one torrent and allow manual reannounce."""
 
     BINDINGS = [
@@ -193,6 +218,7 @@ class TorrentTrackersScreen(Screen[None]):
         )
 
     def on_mount(self) -> None:
+        self._hide_main_footer()
         table = self.query_one("#trackers-table", DataTable)
         table.cursor_type = "row"
         table.add_columns(
@@ -207,6 +233,9 @@ class TorrentTrackersScreen(Screen[None]):
             "Announce URL",
         )
         self.action_refresh_trackers()
+
+    def on_unmount(self) -> None:
+        self._restore_main_footer()
 
     def action_back(self) -> None:
         self.app.pop_screen()
