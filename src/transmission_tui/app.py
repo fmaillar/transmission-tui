@@ -7,11 +7,69 @@ from operator import attrgetter
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.coordinate import Coordinate
-from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.screen import ModalScreen, Screen
+from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from .format import human_bytes, human_rate
-from .rpc import TorrentDetails, TorrentSnapshot, TransmissionClient
+from .rpc import AddedTorrent, TorrentDetails, TorrentSnapshot, TransmissionClient
+
+
+class AddTorrentScreen(ModalScreen[AddedTorrent | None]):
+    """Dialog used to add a torrent from an URL or magnet link."""
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    CSS = """
+    AddTorrentScreen {
+        align: center middle;
+    }
+    #add-box {
+        width: 85%;
+        max-width: 110;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #add-title {
+        height: 1;
+        margin-bottom: 1;
+        text-style: bold;
+    }
+    #add-error {
+        height: auto;
+        min-height: 1;
+        margin-top: 1;
+        color: $error;
+    }
+    """
+
+    def __init__(self, rpc: TransmissionClient) -> None:
+        super().__init__()
+        self.rpc = rpc
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="add-box"):
+            yield Static("Add torrent — paste an HTTP(S) .torrent URL or magnet link", id="add-title")
+            yield Input(placeholder="https://…/file.torrent  or  magnet:?xt=urn:btih:…", id="add-source")
+            yield Static("Enter: add   Esc: cancel", id="add-hint")
+            yield Static("", id="add-error")
+
+    def on_mount(self) -> None:
+        self.query_one("#add-source", Input).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        try:
+            added = self.rpc.add_torrent(event.value)
+        except Exception as exc:
+            self.query_one("#add-error", Static).update(f"Error: {exc}")
+            return
+        self.dismiss(added)
 
 
 class TorrentDetailScreen(Screen[None]):
@@ -107,10 +165,11 @@ def _human_eta(seconds: int) -> str:
 
 class TransmissionTUI(App[None]):
     TITLE = "Transmission TUI"
-    SUB_TITLE = "read-only monitor"
+    SUB_TITLE = "monitor and control"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
+        ("a", "add_torrent", "Add"),
         ("r", "refresh_now", "Refresh"),
         ("i", "sort_id", "Sort ID"),
         ("u", "sort_up", "Sort Up"),
@@ -156,6 +215,17 @@ class TransmissionTUI(App[None]):
             self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
         self.push_screen(TorrentDetailScreen(details))
+
+    def action_add_torrent(self) -> None:
+        self.push_screen(AddTorrentScreen(self.rpc), self._torrent_added)
+
+    def _torrent_added(self, added: AddedTorrent | None) -> None:
+        if added is None:
+            return
+        self.refresh_data()
+        self.query_one("#summary", Static).update(
+            f"Added torrent {added.id}: {added.name}"
+        )
 
     def action_refresh_now(self) -> None:
         self.refresh_data()
