@@ -69,8 +69,8 @@ Connection settings are configured through environment variables:
 | --- | --- | --- |
 | `TRANSMISSION_HOST` | `127.0.0.1` | RPC server hostname or address |
 | `TRANSMISSION_PORT` | `9091` | RPC server port |
-| `TRANSMISSION_USER` | unset | RPC username |
-| `TRANSMISSION_PASSWORD` | unset | RPC password |
+| `TRANSMISSION_USER` | unset | RPC username; overrides `.netrc` |
+| `TRANSMISSION_PASSWORD` | unset | RPC password; overrides `.netrc` |
 
 For a remote daemon:
 
@@ -80,7 +80,26 @@ TRANSMISSION_PORT=9091 \
 transmission-tui
 ```
 
-With RPC authentication enabled:
+### RPC authentication with `.netrc`
+
+When RPC authentication is enabled and the credential environment variables are
+not set, `transmission-tui` reads the standard `~/.netrc` file.
+
+For the default local RPC endpoint:
+
+```text
+machine localhost
+login fgm
+password YOUR_PASSWORD
+```
+
+An entry for `127.0.0.1` is also accepted. Protect the file with:
+
+```bash
+chmod 600 ~/.netrc
+```
+
+Environment variables take precedence over `.netrc` when explicitly set:
 
 ```bash
 TRANSMISSION_USER=user \
@@ -124,8 +143,9 @@ Do not expose the Transmission RPC port directly to the public Internet. Prefer
 a private network, VPN, or SSH tunnel, and enable RPC authentication when the
 daemon is reachable from another machine.
 
-The password is read from the process environment. Avoid placing credentials in
-shell history or committing them to configuration files.
+For persistent credentials, prefer `~/.netrc` with mode `0600` rather than
+exporting the RPC password into the shell environment. Do not commit credential
+files to the repository.
 
 ## Development
 
@@ -138,19 +158,3 @@ cd transmission-tui
 uv sync
 uv run transmission-tui
 ```
-
-The source is organised as a small Python package under
-`src/transmission_tui/`. Textual provides the interface and event loop,
-while `transmission-rpc` handles communication with the daemon.
-
-## Project status
-
-Version 0.2.0 turns the original read-only monitor into a practical Transmission
-management interface. The project is usable for day-to-day administration but
-is still evolving; interfaces and behaviour may change before version 1.0.
-
-See [CHANGELOG.md](CHANGELOG.md) for release details.
-
-## License
-
-This project is released under the [MIT License](LICENSE).
