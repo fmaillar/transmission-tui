@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from netrc import NetrcParseError, netrc
 import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -83,11 +84,21 @@ class TransmissionClient:
     """Small adapter around the Transmission RPC client."""
 
     def __init__(self) -> None:
+        host = os.environ.get("TRANSMISSION_HOST", "127.0.0.1")
+        port = int(os.environ.get("TRANSMISSION_PORT", "9091"))
+        username = os.environ.get("TRANSMISSION_USER") or None
+        password = os.environ.get("TRANSMISSION_PASSWORD") or None
+
+        if username is None or password is None:
+            netrc_username, netrc_password = _netrc_credentials(host)
+            username = username or netrc_username
+            password = password or netrc_password
+
         self._client = Client(
-            host=os.environ.get("TRANSMISSION_HOST", "127.0.0.1"),
-            port=int(os.environ.get("TRANSMISSION_PORT", "9091")),
-            username=os.environ.get("TRANSMISSION_USER") or None,
-            password=os.environ.get("TRANSMISSION_PASSWORD") or None,
+            host=host,
+            port=port,
+            username=username,
+            password=password,
             timeout=5.0,
         )
 
@@ -320,6 +331,28 @@ class TransmissionClient:
             creator=_str(_attr(torrent, "creator", default="")),
             magnet_link=_str(_attr(torrent, "magnet_link", "magnetLink", default="")),
         )
+
+
+def _netrc_credentials(host: str) -> tuple[str | None, str | None]:
+    """Return RPC credentials from ~/.netrc for host, if available."""
+    try:
+        credentials = netrc()
+    except (FileNotFoundError, NetrcParseError, OSError):
+        return None, None
+
+    hosts = [host]
+    if host == "127.0.0.1":
+        hosts.append("localhost")
+    elif host == "localhost":
+        hosts.append("127.0.0.1")
+
+    for candidate in hosts:
+        auth = credentials.authenticators(candidate)
+        if auth is not None:
+            login, _account, password = auth
+            return login or None, password or None
+
+    return None, None
 
 
 def _download_torrent(url: str) -> bytes:
