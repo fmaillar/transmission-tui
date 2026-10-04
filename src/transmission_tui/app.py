@@ -11,6 +11,7 @@ from textual.screen import ModalScreen, Screen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
+from .config import load_config
 from .format import human_bytes, human_rate
 from .rpc import (
     AddedTorrent,
@@ -552,7 +553,7 @@ class TransmissionTUI(App[None]):
         self.sort_reverse = False
         self.filter_name = "all"
         self.search_query = ""
-        self.refresh_interval = self.DEFAULT_REFRESH_INTERVAL
+        self.refresh_interval = load_config().refresh_interval
         self._refresh_timer: Timer | None = None
         self._row_order: list[str] = []
 
