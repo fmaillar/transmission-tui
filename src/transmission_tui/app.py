@@ -532,8 +532,8 @@ class TransmissionTUI(App[None]):
         ("x", "remove_torrent", "Remove"),
         ("d", "delete_torrent", "Delete data"),
         ("r", "refresh_now", "Refresh"),
-        ("plus", "refresh_faster", "Refresh +"),
-        ("minus", "refresh_slower", "Refresh -"),
+        ("plus", "refresh_faster", "Interval +"),
+        ("minus", "refresh_slower", "Interval -"),
         ("i", "sort_id", "Sort ID"),
         ("u", "sort_up", "Sort Up"),
         ("D", "sort_down", "Sort Down"),
@@ -773,9 +773,9 @@ class TransmissionTUI(App[None]):
         self.refresh_data()
 
     def action_refresh_faster(self) -> None:
-        new_interval = max(
-            self.MIN_REFRESH_INTERVAL,
-            self.refresh_interval - self.REFRESH_STEP,
+        new_interval = min(
+            self.MAX_REFRESH_INTERVAL,
+            self.refresh_interval + self.REFRESH_STEP,
         )
         if new_interval == self.refresh_interval:
             return
@@ -784,9 +784,9 @@ class TransmissionTUI(App[None]):
         self.refresh_data()
 
     def action_refresh_slower(self) -> None:
-        new_interval = min(
-            self.MAX_REFRESH_INTERVAL,
-            self.refresh_interval + self.REFRESH_STEP,
+        new_interval = max(
+            self.MIN_REFRESH_INTERVAL,
+            self.refresh_interval - self.REFRESH_STEP,
         )
         if new_interval == self.refresh_interval:
             return
