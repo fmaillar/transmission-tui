@@ -89,9 +89,11 @@ def _string(value: object, name: str) -> str:
 
 
 def _port(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError(f"{name} must be an integer")
     try:
         port = int(value)
-    except (TypeError, ValueError) as exc:
+    except ValueError as exc:
         raise ValueError(f"{name} must be an integer") from exc
     if not 1 <= port <= 65535:
         raise ValueError(f"{name} must be between 1 and 65535")
@@ -99,9 +101,11 @@ def _port(value: object, name: str) -> int:
 
 
 def _refresh_interval(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(f"{name} must be a number")
     try:
         interval = float(value)
-    except (TypeError, ValueError) as exc:
+    except ValueError as exc:
         raise ValueError(f"{name} must be a number") from exc
     if not MIN_REFRESH_INTERVAL <= interval <= MAX_REFRESH_INTERVAL:
         raise ValueError(
