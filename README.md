@@ -63,12 +63,30 @@ By default, the application connects to `127.0.0.1:9091`:
 transmission-tui
 ```
 
-Connection settings are configured through environment variables:
+Persistent settings can be stored in:
+
+```text
+~/.config/transmission-tui/config.toml
+```
+
+For example:
+
+```toml
+[connection]
+host = "100.70.248.101"
+port = 9091
+
+[ui]
+refresh_interval = 1.0
+```
+
+Environment variables override the configuration file:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TRANSMISSION_HOST` | `127.0.0.1` | RPC server hostname or address |
 | `TRANSMISSION_PORT` | `9091` | RPC server port |
+| `TRANSMISSION_REFRESH_INTERVAL` | `1.0` | Refresh interval in seconds |
 | `TRANSMISSION_USER` | unset | RPC username; overrides `.netrc` |
 | `TRANSMISSION_PASSWORD` | unset | RPC password; overrides `.netrc` |
 
@@ -126,6 +144,7 @@ transmission-tui
 | `x` | Remove the torrent and keep its data |
 | `d` | Delete the torrent and its data |
 | `r` | Refresh immediately |
+| `+` / `-` | Adjust refresh interval by 250 ms |
 | `i` | Sort by torrent ID |
 | `u` | Sort by upload rate |
 | `D` | Sort by download rate |
