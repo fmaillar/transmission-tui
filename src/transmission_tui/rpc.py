@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from importlib.metadata import version
 from netrc import NetrcParseError, netrc
 import os
 from urllib.error import HTTPError, URLError
@@ -364,7 +365,7 @@ def _download_torrent(url: str) -> bytes:
     request = Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0 transmission-tui/0.1",
+            "User-Agent": f"Mozilla/5.0 transmission-tui/{version('transmission-tui')}",
             "Accept": "application/x-bittorrent,application/octet-stream,*/*;q=0.8",
         },
     )
