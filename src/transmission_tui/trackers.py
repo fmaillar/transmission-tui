@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
-from textual.app import ComposeResult
+from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
@@ -127,6 +127,7 @@ class TrackerTransmissionClient(BaseTransmissionClient):
 class _ContextScreenMixin:
     """Hide the main application's docked footer while a subview is open."""
 
+    app: App[Any]
     _main_footer: Footer | None = None
 
     def _hide_main_footer(self) -> None:
@@ -368,7 +369,8 @@ class TransmissionTUI(BaseTransmissionTUI):
         if selected is None:
             return
         torrent_id, torrent_name, _ = selected
-        self.push_screen(TorrentTrackersScreen(self.rpc, torrent_id, torrent_name))
+        rpc = cast(TrackerTransmissionClient, self.rpc)
+        self.push_screen(TorrentTrackersScreen(rpc, torrent_id, torrent_name))
 
 
 def _value(obj: Any, *names: str, default: Any) -> Any:
