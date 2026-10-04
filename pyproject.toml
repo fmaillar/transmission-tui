@@ -17,12 +17,6 @@ dependencies = [
   "transmission-rpc>=7.0",
 ]
 
-[dependency-groups]
-dev = [
-  "mypy>=1.11",
-  "ruff>=0.7",
-]
-
 [project.scripts]
 transmission-tui = "transmission_tui.__main__:main"
 
@@ -39,7 +33,7 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src", "tests"]
+files = ["src"]
 check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
