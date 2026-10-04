@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from transmission_tui.app import TransmissionTUI
 from transmission_tui.config import Config
