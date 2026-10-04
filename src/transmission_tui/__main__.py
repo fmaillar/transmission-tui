@@ -16,11 +16,17 @@ def main() -> None:
         epilog="""Connection:
   By default, connects to 127.0.0.1:9091.
 
+Configuration file:
+  ~/.config/transmission-tui/config.toml
+
 Environment variables:
-  TRANSMISSION_HOST       RPC host (default: 127.0.0.1)
-  TRANSMISSION_PORT       RPC port (default: 9091)
-  TRANSMISSION_USER       RPC username
-  TRANSMISSION_PASSWORD   RPC password
+  TRANSMISSION_HOST               RPC host (default: 127.0.0.1)
+  TRANSMISSION_PORT               RPC port (default: 9091)
+  TRANSMISSION_REFRESH_INTERVAL   refresh interval in seconds
+  TRANSMISSION_USER               RPC username
+  TRANSMISSION_PASSWORD           RPC password
+
+Environment variables override config.toml.
 
 Main keys:
   Enter   Open torrent details
