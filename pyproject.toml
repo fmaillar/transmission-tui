@@ -17,8 +17,31 @@ dependencies = [
   "transmission-rpc>=7.0",
 ]
 
+[dependency-groups]
+dev = [
+  "mypy>=1.11",
+  "ruff>=0.7",
+]
+
 [project.scripts]
 transmission-tui = "transmission_tui.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/transmission_tui"]
+
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "tests"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+ignore_missing_imports = true
