@@ -192,8 +192,8 @@ Run the complete local validation before pushing:
 
 ```bash
 uv run python -m unittest discover -s tests -v
-uv run ruff check .
-uv run mypy
+uvx ruff check .
+uvx mypy
 ```
 
 GitHub Actions runs the unit tests on Python 3.11, 3.13, and 3.14, and runs
