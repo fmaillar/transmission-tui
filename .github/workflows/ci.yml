@@ -56,7 +56,7 @@ jobs:
         run: uv sync --python 3.13
 
       - name: Ruff
-        run: uv run ruff check .
+        run: uvx ruff check .
 
       - name: mypy
-        run: uv run mypy
+        run: uvx mypy
