@@ -7,6 +7,7 @@ from datetime import datetime
 from netrc import NetrcParseError, netrc
 import os
 from urllib.error import HTTPError, URLError
+from typing import Any, cast
 from urllib.request import Request, urlopen
 
 from transmission_rpc import Client
@@ -391,7 +392,7 @@ def _int(value: object, *, default: int = 0) -> int:
     if value is None:
         return default
     try:
-        return int(value)
+        return int(cast(Any, value))
     except (TypeError, ValueError):
         return default
 
@@ -400,7 +401,7 @@ def _float(value: object, *, default: float = 0.0) -> float:
     if value is None:
         return default
     try:
-        return float(value)
+        return float(cast(Any, value))
     except (TypeError, ValueError):
         return default
 
@@ -415,7 +416,7 @@ def _date(value: object) -> str:
     if isinstance(value, datetime):
         return value.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     try:
-        timestamp = int(value)
+        timestamp = int(cast(Any, value))
     except (TypeError, ValueError):
         return "-"
     if timestamp <= 0:
