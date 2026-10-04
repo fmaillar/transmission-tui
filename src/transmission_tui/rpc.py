@@ -11,6 +11,8 @@ from urllib.request import Request, urlopen
 
 from transmission_rpc import Client
 
+from .config import load_config
+
 
 _MAX_TORRENT_SIZE = 16 * 1024 * 1024
 
@@ -84,8 +86,9 @@ class TransmissionClient:
     """Small adapter around the Transmission RPC client."""
 
     def __init__(self) -> None:
-        host = os.environ.get("TRANSMISSION_HOST", "127.0.0.1")
-        port = int(os.environ.get("TRANSMISSION_PORT", "9091"))
+        config = load_config()
+        host = config.host
+        port = config.port
         username = os.environ.get("TRANSMISSION_USER") or None
         password = os.environ.get("TRANSMISSION_PASSWORD") or None
 
