@@ -17,8 +17,8 @@ def main() -> None:
   By default, connects to 127.0.0.1:9091.
 
 Environment variables:
-  TRANSMISSION_HOST       RPC host
-  TRANSMISSION_PORT       RPC port
+  TRANSMISSION_HOST       RPC host (default: 127.0.0.1)
+  TRANSMISSION_PORT       RPC port (default: 9091)
   TRANSMISSION_USER       RPC username
   TRANSMISSION_PASSWORD   RPC password
 
@@ -46,8 +46,8 @@ Main keys:
 Examples:
   transmission-tui
 
-  TRANSMISSION_HOST=m710s \
-  TRANSMISSION_PORT=9091 \
+  TRANSMISSION_HOST=m710s \\
+  TRANSMISSION_PORT=9091 \\
   transmission-tui
 
 Project:
