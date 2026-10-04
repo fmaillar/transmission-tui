@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 from importlib.metadata import version
 
+from transmission_rpc import TransmissionError
+
 from .trackers import TransmissionTUI
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="transmission-tui",
         description="Terminal interface for monitoring and controlling Transmission.",
@@ -65,9 +67,14 @@ Project:
         action="version",
         version=f"%(prog)s {version('transmission-tui')}",
     )
-    parser.parse_args()
+    parser.parse_args(argv)
 
-    TransmissionTUI().run()
+    try:
+        TransmissionTUI().run()
+    except ValueError as exc:
+        parser.exit(2, f"configuration error: {exc}\n")
+    except TransmissionError as exc:
+        parser.exit(1, f"RPC error: {exc}\n")
 
 
 if __name__ == "__main__":
