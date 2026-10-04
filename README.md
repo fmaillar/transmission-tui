@@ -32,6 +32,16 @@ without requiring a browser or an additional web frontend.
 - Python 3.11 or later
 - A reachable Transmission RPC endpoint
 
+## Compatibility policy
+
+- Python 3.11, 3.13, and 3.14 are exercised in CI.
+- Python 3.12 is expected to work as part of the supported `>=3.11` range, but
+  is not a dedicated CI matrix entry.
+- Textual 1.0 or later is supported; CI resolves the current compatible
+  release so upstream regressions are detected early.
+- `transmission-rpc` 7.0 or later is supported.
+- Linux terminals are the primary supported runtime environment.
+
 The application depends only on
 [Textual](https://textual.textualize.io/) and
 [transmission-rpc](https://github.com/Trim21/transmission-rpc).
@@ -168,8 +178,8 @@ files to the repository.
 
 ## Development
 
-Create the locked development environment and run the application from the
-working tree:
+Create the development environment and run the application from the working
+tree:
 
 ```bash
 git clone https://github.com/fmaillar/transmission-tui.git
@@ -177,3 +187,14 @@ cd transmission-tui
 uv sync
 uv run transmission-tui
 ```
+
+Run the complete local validation before pushing:
+
+```bash
+uv run python -m unittest discover -s tests -v
+uv run ruff check .
+uv run mypy
+```
+
+GitHub Actions runs the unit tests on Python 3.11, 3.13, and 3.14, and runs
+`ruff` plus `mypy` on Python 3.13.
