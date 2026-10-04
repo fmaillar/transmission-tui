@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.coordinate import Coordinate
 from textual.screen import ModalScreen, Screen
+from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from .format import human_bytes, human_rate
@@ -513,6 +514,11 @@ class TransmissionTUI(App[None]):
 
     FILTERS = ("all", "active", "downloading", "seeding", "stopped")
 
+    REFRESH_STEP = 0.25
+    MIN_REFRESH_INTERVAL = 0.25
+    MAX_REFRESH_INTERVAL = 10.0
+    DEFAULT_REFRESH_INTERVAL = 1.0
+
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("a", "add_torrent", "Add"),
@@ -525,6 +531,8 @@ class TransmissionTUI(App[None]):
         ("x", "remove_torrent", "Remove"),
         ("d", "delete_torrent", "Delete data"),
         ("r", "refresh_now", "Refresh"),
+        ("plus", "refresh_faster", "Refresh +"),
+        ("minus", "refresh_slower", "Refresh -"),
         ("i", "sort_id", "Sort ID"),
         ("u", "sort_up", "Sort Up"),
         ("D", "sort_down", "Sort Down"),
@@ -544,6 +552,8 @@ class TransmissionTUI(App[None]):
         self.sort_reverse = False
         self.filter_name = "all"
         self.search_query = ""
+        self.refresh_interval = self.DEFAULT_REFRESH_INTERVAL
+        self._refresh_timer: Timer | None = None
         self._row_order: list[str] = []
 
     def compose(self) -> ComposeResult:
@@ -567,7 +577,7 @@ class TransmissionTUI(App[None]):
             "Status",
             "Name",
         )
-        self.set_interval(1.0, self.refresh_data)
+        self._reset_refresh_timer()
         self.refresh_data()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -750,7 +760,37 @@ class TransmissionTUI(App[None]):
             message = f"Removed torrent {torrent_id}; data kept: {torrent_name}"
         self.query_one("#summary", Static).update(message)
 
+    def _reset_refresh_timer(self) -> None:
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+        self._refresh_timer = self.set_interval(
+            self.refresh_interval,
+            self.refresh_data,
+        )
+
     def action_refresh_now(self) -> None:
+        self.refresh_data()
+
+    def action_refresh_faster(self) -> None:
+        new_interval = max(
+            self.MIN_REFRESH_INTERVAL,
+            self.refresh_interval - self.REFRESH_STEP,
+        )
+        if new_interval == self.refresh_interval:
+            return
+        self.refresh_interval = new_interval
+        self._reset_refresh_timer()
+        self.refresh_data()
+
+    def action_refresh_slower(self) -> None:
+        new_interval = min(
+            self.MAX_REFRESH_INTERVAL,
+            self.refresh_interval + self.REFRESH_STEP,
+        )
+        if new_interval == self.refresh_interval:
+            return
+        self.refresh_interval = new_interval
+        self._reset_refresh_timer()
         self.refresh_data()
 
     def action_sort_id(self) -> None:
@@ -829,6 +869,7 @@ class TransmissionTUI(App[None]):
             f"Size: {human_bytes(size)}  Uploaded: {human_bytes(uploaded)}  "
             f"Ratio: {ratio:.2f}\n"
             f"Down: {human_rate(down)}  Up: {human_rate(up)}  "
+            f"Refresh: {self.refresh_interval:.2f}s  "
             f"Filter: {self.filter_name}{search}  "
             f"Sort: {self.sort_key}{' desc' if self.sort_reverse else ' asc'}"
         )
