@@ -160,13 +160,20 @@ class ContextTorrentDetailScreen(_ContextScreenMixin, BaseTorrentDetailScreen):
         yield Header()
         yield Static(self._render_details(), id="details", markup=False)
         yield Static(
-            "Esc Back",
+            f"Torrent {self.torrent_id}: {self.torrent_name}",
+            id="files-summary",
+            markup=False,
+        )
+        yield DataTable(id="files-table", zebra_stripes=True)
+        yield Static(
+            "Esc Back   Space/w Toggle file   1 Low   2 Normal   3 High   r Refresh",
             id="context-shortcuts",
             markup=False,
         )
 
     def on_mount(self) -> None:
         self._hide_main_footer()
+        super().on_mount()
 
     def on_unmount(self) -> None:
         self._restore_main_footer()
@@ -362,7 +369,7 @@ class TransmissionTUI(BaseTransmissionTUI):
         except Exception as exc:
             self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
-        self.push_screen(ContextTorrentDetailScreen(details))
+        self.push_screen(ContextTorrentDetailScreen(self.rpc, details))
 
     def action_show_trackers(self) -> None:
         selected = self._selected_torrent()
