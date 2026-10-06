@@ -294,6 +294,7 @@ class TorrentFilesScreen(Screen[None]):
     BINDINGS = [
         ("escape", "back", "Back"),
         ("q", "back", "Back"),
+        ("space", "toggle_wanted", "Toggle"),
         ("w", "toggle_wanted", "Wanted"),
         ("1", "priority_low", "Low"),
         ("2", "priority_normal", "Normal"),
@@ -366,7 +367,7 @@ class TorrentFilesScreen(Screen[None]):
             progress = (file.completed / file.size * 100.0) if file.size else 100.0
             table.add_row(
                 str(file.id),
-                "yes" if file.wanted else "no",
+                "[x]" if file.wanted else "[ ]",
                 file.priority,
                 f"{progress:.0f}%",
                 human_bytes(file.size),
@@ -383,7 +384,7 @@ class TorrentFilesScreen(Screen[None]):
         self.query_one("#files-summary", Static).update(
             f"Torrent {self.torrent_id}: {self.torrent_name}\n"
             f"Files: {len(files)}  Wanted: {wanted_count}  "
-            "w toggle  1 low  2 normal  3 high"
+            "Space/w toggle  1 low  2 normal  3 high"
         )
 
     def action_toggle_wanted(self) -> None:
@@ -418,13 +419,8 @@ class TorrentFilesScreen(Screen[None]):
         self._set_priority("high")
 
 
-class TorrentDetailScreen(Screen[None]):
-    """Read-only detail view for a single torrent."""
-
-    BINDINGS = [
-        ("escape", "back", "Back"),
-        ("q", "back", "Back"),
-    ]
+class TorrentDetailScreen(TorrentFilesScreen):
+    """Torrent details with an interactive file-selection panel."""
 
     CSS = """
     #details {
@@ -433,19 +429,24 @@ class TorrentDetailScreen(Screen[None]):
         overflow-y: auto;
         overflow-x: auto;
     }
+    #files-summary { height: 2; padding: 0 2; }
+    #files-table { height: 1fr; }
     """
 
-    def __init__(self, details: TorrentDetails) -> None:
-        super().__init__()
+    def __init__(self, rpc: TransmissionClient, details: TorrentDetails) -> None:
+        super().__init__(rpc, details.id, details.name)
         self.details = details
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(self._render_details(), id="details", markup=False)
+        yield Static(
+            f"Torrent {self.torrent_id}: {self.torrent_name}",
+            id="files-summary",
+            markup=False,
+        )
+        yield DataTable(id="files-table", zebra_stripes=True)
         yield Footer()
-
-    def action_back(self) -> None:
-        self.app.pop_screen()
 
     def _render_details(self) -> str:
         torrent = self.details
@@ -596,7 +597,7 @@ class TransmissionTUI(App[None]):
         except Exception as exc:
             self.query_one("#summary", Static).update(f"RPC error: {exc}")
             return
-        self.push_screen(TorrentDetailScreen(details))
+        self.push_screen(TorrentDetailScreen(self.rpc, details))
 
     def _selected_torrent(self) -> tuple[int, str, str] | None:
         table = self.query_one("#table", DataTable)
