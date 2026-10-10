@@ -83,7 +83,7 @@ For example:
 
 ```toml
 [connection]
-host = "100.70.248.101"
+host = "192.168.1.1"
 port = 9091
 
 [ui]
