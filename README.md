@@ -117,7 +117,7 @@ For the default local RPC endpoint:
 
 ```text
 machine localhost
-login fgm
+login YOUR_LOGIN
 password YOUR_PASSWORD
 ```
 
